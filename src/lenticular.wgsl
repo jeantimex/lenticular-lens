@@ -6,8 +6,8 @@ struct Uniforms {
   canvasAspectRatio: f32,
   cardScale: f32,
   glareIntensity: f32,
-  sparkleIntensity: f32,
   glossiness: f32,
+  glitterIntensity: f32,
   time: f32,
   padding1: f32,
   padding2: f32,
@@ -132,25 +132,118 @@ fn blendSoftLight(base: vec3f, blend: vec3f) -> vec3f {
   );
 }
 
-// Hash function for noise
+// Hash functions for noise
 fn hash(p: vec2f) -> f32 {
   let p3 = fract(vec3f(p.x, p.y, p.x) * 0.13);
   let p3dot = dot(p3, vec3f(p3.y, p3.z, p3.x) + 33.33);
   return fract((p3.x + p3.y) * p3.z + p3dot);
 }
 
-// Sparkle noise
-fn sparkle(uv: vec2f, time: f32) -> f32 {
-  let grid = floor(uv * 80.0);
-  let h = hash(grid + floor(time * 2.0));
-  let sparkleThreshold = 0.97;
-  if (h > sparkleThreshold) {
-    let localUV = fract(uv * 80.0) - 0.5;
-    let dist = length(localUV);
-    let twinkle = sin(time * 10.0 + h * 100.0) * 0.5 + 0.5;
-    return (1.0 - smoothstep(0.0, 0.3, dist)) * twinkle;
+fn hash2(p: vec2f) -> vec2f {
+  return vec2f(hash(p), hash(p + vec2f(127.1, 311.7)));
+}
+
+// Shape functions for different glitter types
+fn circleShape(localPos: vec2f, center: vec2f, size: f32) -> f32 {
+  let dist = length(localPos - center);
+  return 1.0 - smoothstep(0.0, size, dist);
+}
+
+fn diamondShape(localPos: vec2f, center: vec2f, size: f32) -> f32 {
+  let d = abs(localPos - center);
+  let dist = d.x + d.y;
+  return 1.0 - smoothstep(0.0, size * 1.4, dist);
+}
+
+fn starShape(localPos: vec2f, center: vec2f, size: f32) -> f32 {
+  let p = localPos - center;
+  let angle = atan2(p.y, p.x);
+  let radius = length(p);
+  // 4-pointed star
+  let star = abs(cos(angle * 2.0)) * 0.5 + 0.5;
+  let targetRadius = size * (0.3 + star * 0.7);
+  return 1.0 - smoothstep(0.0, targetRadius, radius);
+}
+
+// Glitter effect with multiple shapes (cosmos style)
+fn cosmosGlitter(uv: vec2f, offset: vec2f, density: f32, viewAngle: vec2f) -> f32 {
+  let scaledUV = uv * density + offset;
+  let gridPos = floor(scaledUV);
+  let localPos = fract(scaledUV);
+
+  // Random values for this cell
+  let cellHash = hash(gridPos);
+  let cellHash2 = hash2(gridPos);
+
+  // Only some cells have glitter
+  if (cellHash < 0.5) {
+    return 0.0;
   }
-  return 0.0;
+
+  // Random position within cell
+  let glitterPos = cellHash2 * 0.6 + 0.2;
+
+  // Choose shape based on hash (0: circle, 1: diamond, 2: star)
+  let shapeType = i32(floor(cellHash * 3.0));
+  let size = 0.1 + cellHash2.x * 0.1;
+
+  var shape: f32;
+  if (shapeType == 0) {
+    shape = circleShape(localPos, glitterPos, size);
+  } else if (shapeType == 1) {
+    shape = diamondShape(localPos, glitterPos, size);
+  } else {
+    shape = starShape(localPos, glitterPos, size * 1.5);
+  }
+
+  // Glitter visibility depends on view angle matching the "facet" angle
+  let facetAngle = cellHash2 * 2.0 - 1.0;
+  let angleDiff = length(viewAngle - facetAngle);
+  let angleMatch = 1.0 - smoothstep(0.0, 1.2, angleDiff);
+
+  // Twinkle
+  let twinkle = sin(cellHash * 50.0 + viewAngle.x * 8.0 + viewAngle.y * 6.0) * 0.4 + 0.6;
+
+  return shape * angleMatch * twinkle;
+}
+
+// Check if UV is in the artwork/actor area
+fn isInArtworkArea(uv: vec2f) -> f32 {
+  // Artwork area bounds (adjust these to match your card layout)
+  let left = 0.08;
+  let right = 0.92;
+  let top = 0.20;
+  let bottom = 0.62;
+
+  let inX = smoothstep(left - 0.02, left + 0.02, uv.x) * (1.0 - smoothstep(right - 0.02, right + 0.02, uv.x));
+  let inY = smoothstep(top - 0.02, top + 0.02, uv.y) * (1.0 - smoothstep(bottom - 0.02, bottom + 0.02, uv.y));
+
+  return inX * inY;
+}
+
+// Cosmos/Galaxy glitter effect
+fn cosmosEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
+  let viewAngle = (pointerPos - 0.5) * 2.0;
+
+  // Multiple layers at different densities
+  let layer1 = cosmosGlitter(uv, viewAngle * 0.15, 25.0, viewAngle);
+  let layer2 = cosmosGlitter(uv, vec2f(0.33, 0.33) + viewAngle * 0.2, 20.0, viewAngle * 0.9);
+  let layer3 = cosmosGlitter(uv, vec2f(0.66, 0.66) + viewAngle * 0.1, 30.0, viewAngle * 1.1);
+
+  let combined = max(max(layer1, layer2), layer3);
+
+  // Rainbow/holographic color
+  let hue = fract(uv.x * 0.5 + uv.y * 0.5 + viewAngle.x * 0.3 + time * 0.1);
+  let glitterColor = vec3f(
+    0.5 + 0.5 * sin(hue * 6.28),
+    0.5 + 0.5 * sin(hue * 6.28 + 2.09),
+    0.5 + 0.5 * sin(hue * 6.28 + 4.18)
+  );
+
+  // Make it brighter and more white-ish
+  let finalColor = mix(vec3f(1.0), glitterColor, 0.6);
+
+  return finalColor * combined;
 }
 
 @fragment
@@ -217,14 +310,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     color = vec4f(color.rgb * (1.0 - edgeDark * uniforms.glareIntensity), color.a);
   }
 
-  // --- 3. Sparkle Effect ---
-  if (uniforms.sparkleIntensity > 0.0) {
-    let sparkleValue = sparkle(uv, uniforms.time);
-    let sparkleColor = vec3f(1.0, 1.0, 1.0) * sparkleValue;
+  // --- 2. Cosmos Glitter Effect (artwork area only) ---
+  if (uniforms.glitterIntensity > 0.0) {
+    let artworkMask = isInArtworkArea(uv);
 
-    // Add sparkles with color dodge for bright points
-    let sparkleBlend = blendColorDodge(color.rgb, sparkleColor);
-    color = vec4f(mix(color.rgb, sparkleBlend, uniforms.sparkleIntensity * sparkleValue), color.a);
+    if (artworkMask > 0.0) {
+      let glitterValue = cosmosEffect(uv, pointerPos, uniforms.time);
+
+      // Apply with color-dodge blend for bright sparkles
+      let glitterBlend = blendColorDodge(color.rgb, glitterValue);
+      color = vec4f(mix(color.rgb, glitterBlend, uniforms.glitterIntensity * artworkMask), color.a);
+
+      // Add soft-light layer for subtler effect
+      let softGlitter = blendSoftLight(color.rgb, glitterValue * 0.5);
+      color = vec4f(mix(color.rgb, softGlitter, uniforms.glitterIntensity * 0.3 * artworkMask), color.a);
+    }
   }
 
   // --- 4. Glossy Reflection / Fresnel Effect ---
