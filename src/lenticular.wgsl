@@ -5,12 +5,12 @@ struct Uniforms {
   imageAspectRatio: f32,
   canvasAspectRatio: f32,
   cardScale: f32,
-  holoIntensity: f32,
   glareIntensity: f32,
   sparkleIntensity: f32,
   glossiness: f32,
   time: f32,
   padding1: f32,
+  padding2: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -153,25 +153,6 @@ fn sparkle(uv: vec2f, time: f32) -> f32 {
   return 0.0;
 }
 
-// Rainbow holo gradient
-fn rainbowGradient(t: f32) -> vec3f {
-  let colors = array<vec3f, 6>(
-    vec3f(0.97, 0.05, 0.21),  // Red
-    vec3f(0.93, 0.87, 0.06),  // Yellow
-    vec3f(0.13, 0.91, 0.52),  // Green
-    vec3f(0.05, 0.74, 0.91),  // Cyan
-    vec3f(0.47, 0.32, 0.95),  // Blue
-    vec3f(0.79, 0.16, 0.95)   // Violet
-  );
-
-  let index = t * 5.0;
-  let i = i32(floor(index)) % 6;
-  let nextI = (i + 1) % 6;
-  let f = fract(index);
-
-  return mix(colors[i], colors[nextI], f);
-}
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   let uv = in.uv;
@@ -217,22 +198,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   // Distance from center for intensity calculations
   let pointerFromCenter = length(pointerPos - vec2f(0.5, 0.5)) * 2.0;
 
-  // --- 1. Rainbow Holographic Gradient ---
-  if (uniforms.holoIntensity > 0.0) {
-    // Diagonal rainbow that shifts with rotation
-    let rainbowShift = (uv.x + uv.y) * 2.0 + (pointerX - 0.5) * 3.0 + (pointerY - 0.5) * 2.0;
-    let rainbow = rainbowGradient(fract(rainbowShift));
-
-    // Apply with overlay blend mode
-    let holoBlend = blendOverlay(color.rgb, rainbow);
-    color = vec4f(mix(color.rgb, holoBlend, uniforms.holoIntensity * 0.5), color.a);
-
-    // Add color dodge for extra shine
-    let dodgeBlend = blendColorDodge(color.rgb, rainbow * 0.3);
-    color = vec4f(mix(color.rgb, dodgeBlend, uniforms.holoIntensity * 0.3), color.a);
-  }
-
-  // --- 2. Glare/Shine Effect ---
+  // --- 1. Glare/Shine Effect ---
   if (uniforms.glareIntensity > 0.0) {
     // Radial gradient from pointer position
     let glareCenter = pointerPos;
@@ -291,7 +257,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   color = vec4f(color.rgb + grain, color.a);
 
   // --- 6. Dynamic brightness/contrast based on rotation ---
-  let dynamicBrightness = 1.0 + pointerFromCenter * 0.1 * uniforms.holoIntensity;
+  let dynamicBrightness = 1.0 + pointerFromCenter * 0.05;
   color = vec4f(color.rgb * dynamicBrightness, color.a);
 
   // --- 7. Overall glossy sheen ---

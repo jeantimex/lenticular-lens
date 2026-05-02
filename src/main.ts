@@ -210,7 +210,6 @@ async function init() {
     cardScale: 0.8,
     autoRotate: true,
     rotateSpeed: 1.0,
-    holoIntensity: 0.25,
     glareIntensity: 1.0,
     sparkleIntensity: 0.5,
     glossiness: 0.7,
@@ -226,7 +225,6 @@ async function init() {
   lenticularFolder.add(params, 'lensDensity', 5, 100, 1).name('Strip Density');
 
   const holoFolder = gui.addFolder('Holographic');
-  holoFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Rainbow');
   holoFolder.add(params, 'glareIntensity', 0, 1, 0.05).name('Glare');
   holoFolder.add(params, 'sparkleIntensity', 0, 1, 0.05).name('Sparkle');
   holoFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
@@ -261,11 +259,11 @@ async function init() {
       imageAspectRatio,
       canvasAspectRatio,
       params.cardScale,
-      params.holoIntensity,
       params.glareIntensity,
       params.sparkleIntensity,
       params.glossiness,
       time * 0.001, // time in seconds
+      0, // padding
       0, // padding
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
