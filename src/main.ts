@@ -213,6 +213,7 @@ async function init() {
     glareIntensity: 1.0,
     glossiness: 0.7,
     glitterIntensity: 0.6,
+    holoIntensity: 0.5,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -228,6 +229,7 @@ async function init() {
   holoFolder.add(params, 'glareIntensity', 0, 1, 0.05).name('Glare');
   holoFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
   holoFolder.add(params, 'glitterIntensity', 0, 1, 0.05).name('Glitter');
+  holoFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Holo Beams');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'cardScale', 0.3, 1.5, 0.05).name('Scale');
@@ -262,8 +264,8 @@ async function init() {
       params.glareIntensity,
       params.glossiness,
       params.glitterIntensity,
+      params.holoIntensity,
       time * 0.001, // time in seconds
-      0, // padding
       0, // padding
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);

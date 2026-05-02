@@ -8,9 +8,9 @@ struct Uniforms {
   glareIntensity: f32,
   glossiness: f32,
   glitterIntensity: f32,
+  holoIntensity: f32,
   time: f32,
   padding1: f32,
-  padding2: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -221,6 +221,58 @@ fn isInArtworkArea(uv: vec2f) -> f32 {
   return inX * inY;
 }
 
+// Vertical Holo Beam effect (Regular Holo Rare)
+fn holoBeamEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
+  // Move beams based on rotation
+  let relX = 0.5 - pointerPos.x;
+  let relY = 0.5 - pointerPos.y;
+  
+  // Two layers of slanted beams for perspective and depth
+  // Layer 1: Slanted based on vertical pointer position
+  let beamX1 = uv.x + (relX * 1.5) + (pointerPos.y * 0.4);
+  // Layer 2: Slanted differently
+  let beamX2 = uv.x + (relX * -0.8) - (pointerPos.y * 0.6);
+  
+  // Create grouped vertical beams for each layer
+  var beams1 = 0.0;
+  beams1 += smoothstep(0.12, 0.0, abs(fract(beamX1 * 2.0 + 0.1) - 0.5));
+  beams1 += smoothstep(0.08, 0.0, abs(fract(beamX1 * 4.0 + 0.5) - 0.5)) * 0.7;
+  beams1 += smoothstep(0.04, 0.0, abs(fract(beamX1 * 10.0 + 0.8) - 0.5)) * 0.5;
+
+  var beams2 = 0.0;
+  beams2 += smoothstep(0.12, 0.0, abs(fract(beamX2 * 1.5 + 0.3) - 0.5));
+  beams2 += smoothstep(0.08, 0.0, abs(fract(beamX2 * 5.0 + 0.7) - 0.5)) * 0.7;
+  beams2 += smoothstep(0.04, 0.0, abs(fract(beamX2 * 12.0 + 0.2) - 0.5)) * 0.5;
+  
+  let combinedBeams = max(beams1, beams2);
+
+  // Rainbow color mapped to the primary movement
+  let hue = fract(beamX1 * 0.1 + uv.y * 0.05 + time * 0.01);
+  let rainbow = vec3f(
+    0.5 + 0.5 * sin(hue * 6.28),
+    0.5 + 0.5 * sin(hue * 6.28 + 2.09),
+    0.5 + 0.5 * sin(hue * 6.28 + 4.18)
+  );
+
+  // GLARE RESPONSE: Mask beams so they are strongest near the glare
+  let glareDist = length(uv - pointerPos);
+  let glareMask = smoothstep(1.0, 0.2, glareDist);
+  
+  // VERTICAL VARIATION: Make them less uniform top-to-bottom
+  let verticalNoise = sin(uv.y * 8.0 + beamX1 * 5.0 + time * 0.5) * 0.15 + 0.85;
+
+  // Sharp vertical scanlines/stripes
+  let scanline = step(0.6, fract(uv.x * 250.0)) * 0.4 + 0.6;
+  
+  // Add a "core" brightness to beams where they are most intense
+  let beamCore = pow(combinedBeams, 4.0) * glareMask * 2.5;
+  
+  // Combine everything
+  let finalHolo = (rainbow * combinedBeams * glareMask * verticalNoise + vec3f(beamCore * 0.4)) * scanline;
+  
+  return finalHolo * 1.2;
+}
+
 // Cosmos/Galaxy glitter effect
 fn cosmosEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
   let viewAngle = (pointerPos - 0.5) * 2.0;
@@ -310,11 +362,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     color = vec4f(color.rgb * (1.0 - edgeDark * uniforms.glareIntensity), color.a);
   }
 
-  // --- 2. Cosmos Glitter Effect (artwork area only) ---
-  if (uniforms.glitterIntensity > 0.0) {
-    let artworkMask = isInArtworkArea(uv);
-
-    if (artworkMask > 0.0) {
+  // --- 2. Holographic Effects (artwork area only) ---
+  let artworkMask = isInArtworkArea(uv);
+  if (artworkMask > 0.0) {
+    // 2a. Cosmos Glitter
+    if (uniforms.glitterIntensity > 0.0) {
       let glitterValue = cosmosEffect(uv, pointerPos, uniforms.time);
 
       // Apply with color-dodge blend for bright sparkles
@@ -324,6 +376,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
       // Add soft-light layer for subtler effect
       let softGlitter = blendSoftLight(color.rgb, glitterValue * 0.5);
       color = vec4f(mix(color.rgb, softGlitter, uniforms.glitterIntensity * 0.3 * artworkMask), color.a);
+    }
+
+    // 2b. Vertical Holo Beams
+    if (uniforms.holoIntensity > 0.0) {
+      let holoBeamValue = holoBeamEffect(uv, pointerPos, uniforms.time);
+      let holoBeamBlend = blendColorDodge(color.rgb, holoBeamValue);
+      color = vec4f(mix(color.rgb, holoBeamBlend, uniforms.holoIntensity * artworkMask), color.a);
     }
   }
 
