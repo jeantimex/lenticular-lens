@@ -211,11 +211,14 @@ async function init() {
     cardScale: 0.8,
     autoRotate: true,
     rotateSpeed: 1.0,
+    glareEnabled: false,
     glareIntensity: 1.0,
     glossiness: 0.7,
+    glitterEnabled: false,
     glitterIntensity: 0.6,
+    holoEnabled: false,
     holoIntensity: 0.5,
-    radiantEnabled: true,
+    radiantEnabled: false,
     radiantIntensity: 0.5,
     radiantScale: 2.5,
     radiantBrightness: 0.8,
@@ -232,10 +235,18 @@ async function init() {
   lenticularFolder.add(params, 'lensDensity', 5, 100, 1).name('Strip Density');
 
   const holoFolder = gui.addFolder('Holographic');
-  holoFolder.add(params, 'glareIntensity', 0, 1, 0.05).name('Glare');
-  holoFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
-  holoFolder.add(params, 'glitterIntensity', 0, 1, 0.05).name('Glitter');
-  holoFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Holo Beams');
+  const glareFolder = holoFolder.addFolder('Glare');
+  glareFolder.add(params, 'glareEnabled').name('Enabled');
+  glareFolder.add(params, 'glareIntensity', 0, 1, 0.05).name('Intensity');
+
+  const glitterFolder = holoFolder.addFolder('Glitter');
+  glitterFolder.add(params, 'glitterEnabled').name('Enabled');
+  glitterFolder.add(params, 'glitterIntensity', 0, 1, 0.05).name('Intensity');
+
+  const holoBeansFolder = holoFolder.addFolder('Holo Beans');
+  holoBeansFolder.add(params, 'holoEnabled').name('Enabled');
+  holoBeansFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Intensity');
+
   const radiantFolder = holoFolder.addFolder('Radiant Holofoil');
   radiantFolder.add(params, 'radiantEnabled').name('Enabled');
   radiantFolder.add(params, 'radiantIntensity', 0, 1, 0.05).name('Intensity');
@@ -244,6 +255,7 @@ async function init() {
   radiantFolder.add(params, 'radiantArtworkIntensity', 0, 1, 0.05).name('Artwork Alpha');
 
   const cardFolder = gui.addFolder('Card');
+  cardFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
   cardFolder.add(params, 'cardScale', 0.3, 1.5, 0.05).name('Scale');
   cardFolder.add(params, 'autoRotate').name('Auto Rotate');
   cardFolder.add(params, 'rotateSpeed', 0.1, 3, 0.1).name('Rotate Speed');
@@ -273,10 +285,10 @@ async function init() {
       imageAspectRatio,
       canvasAspectRatio,
       params.cardScale,
-      params.glareIntensity,
+      params.glareEnabled ? params.glareIntensity : 0,
       params.glossiness,
-      params.glitterIntensity,
-      params.holoIntensity,
+      params.glitterEnabled ? params.glitterIntensity : 0,
+      params.holoEnabled ? params.holoIntensity : 0,
       params.radiantEnabled ? params.radiantIntensity : 0,
       params.radiantScale,
       params.radiantBrightness,
