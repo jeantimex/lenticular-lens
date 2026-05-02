@@ -60,8 +60,9 @@ async function init() {
   });
 
   // Uniforms: rotateX, rotateY, lensDensity, imageAspectRatio, canvasAspectRatio, cardScale,
-  // holoIntensity, glareIntensity, sparkleIntensity, time, padding x2
-  const uniformBufferSize = 48; // 12 floats (rotateX, rotateY, density, imgAspect, canvasAspect, scale, glare, gloss, glitter, holo, radiant, time)
+  // glareIntensity, glossiness, glitterIntensity, holoIntensity, radiantIntensity,
+  // radiantStripWidth, radiantBrightness, time, padding x2
+  const uniformBufferSize = 64; // 16 floats
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -214,7 +215,11 @@ async function init() {
     glossiness: 0.7,
     glitterIntensity: 0.6,
     holoIntensity: 0.5,
-    radiantIntensity: 0.2,
+    radiantEnabled: true,
+    radiantIntensity: 0.5,
+    radiantScale: 2.5,
+    radiantBrightness: 0.8,
+    radiantArtworkIntensity: 0.2,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -231,7 +236,12 @@ async function init() {
   holoFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
   holoFolder.add(params, 'glitterIntensity', 0, 1, 0.05).name('Glitter');
   holoFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Holo Beams');
-  holoFolder.add(params, 'radiantIntensity', 0, 1, 0.05).name('Radiant');
+  const radiantFolder = holoFolder.addFolder('Radiant Holofoil');
+  radiantFolder.add(params, 'radiantEnabled').name('Enabled');
+  radiantFolder.add(params, 'radiantIntensity', 0, 1, 0.05).name('Intensity');
+  radiantFolder.add(params, 'radiantScale', 0.35, 2.5, 0.05).name('Scale');
+  radiantFolder.add(params, 'radiantBrightness', 0.4, 2.0, 0.05).name('Brightness');
+  radiantFolder.add(params, 'radiantArtworkIntensity', 0, 1, 0.05).name('Artwork Alpha');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'cardScale', 0.3, 1.5, 0.05).name('Scale');
@@ -267,8 +277,12 @@ async function init() {
       params.glossiness,
       params.glitterIntensity,
       params.holoIntensity,
-      params.radiantIntensity,
+      params.radiantEnabled ? params.radiantIntensity : 0,
+      params.radiantScale,
+      params.radiantBrightness,
+      params.radiantArtworkIntensity,
       time * 0.001, // time in seconds
+      0,
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
   }
