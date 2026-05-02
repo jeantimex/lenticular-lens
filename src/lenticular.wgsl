@@ -19,6 +19,8 @@ struct Uniforms {
   pokemonVScale: f32,
   pokemonVStripWidth: f32,
   pokemonVStripSoftness: f32,
+  pokemonVArtworkAlpha: f32,
+  padding0: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -26,6 +28,7 @@ struct Uniforms {
 @group(0) @binding(2) var t0: texture_2d<f32>;
 @group(0) @binding(3) var t1: texture_2d<f32>;
 @group(0) @binding(4) var t2: texture_2d<f32>;
+@group(0) @binding(5) var tFingerprint: texture_2d<f32>;
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -421,24 +424,38 @@ fn sunpillarColor(t: f32) -> vec3f {
   return mix(yellow, purple, (p - 2.0 / 3.0) * 3.0);
 }
 
-// Fingerprint diagonal band pattern from CSS:
-// repeating-linear-gradient(133deg, #0e152e 0%, hsl(180,10%,60%) 3.8%, hsl(180,29%,66%) 4.5%, hsl(180,10%,60%) 5.2%, #0e152e 10%, #0e152e 12%)
-fn fingerprintBand(pos: f32) -> f32 {
-  let p = fract(pos);
-  // Dark background with thin bright band
-  let darkBg = vec3f(0.055, 0.082, 0.18); // #0e152e
+// Procedural fingerprint/illusion pattern - wavy concentric lines
+fn fingerprintPattern(uv: vec2f, scale: f32) -> f32 {
+  let p = uv * scale;
 
-  // Sharp thin band between 3.8% and 5.2% of the 12% cycle
-  // Normalize to 0-1 range where the pattern repeats every 12%
-  let cyclePos = fract(pos * (1.0 / 0.12));
+  // Multiple center points for the wavy pattern
+  let center1 = vec2f(0.3, 0.3);
+  let center2 = vec2f(0.7, 0.7);
+  let center3 = vec2f(0.5, 0.5);
 
-  // Band peaks at 4.5%/12% = 0.375
-  let bandCenter = 0.375;
-  let bandWidth = 0.12; // width of bright band
-  let dist = abs(cyclePos - bandCenter);
-  let band = smoothstep(bandWidth, 0.0, dist);
+  // Distance from each center with wave distortion
+  let d1 = length(p - center1 * scale);
+  let d2 = length(p - center2 * scale);
+  let d3 = length(p - center3 * scale);
 
-  return band;
+  // Add wavy distortion based on angle
+  let angle1 = atan2(p.y - center1.y * scale, p.x - center1.x * scale);
+  let angle2 = atan2(p.y - center2.y * scale, p.x - center2.x * scale);
+
+  let wave1 = d1 + sin(angle1 * 3.0) * 0.3 + sin(angle1 * 7.0) * 0.15;
+  let wave2 = d2 + sin(angle2 * 4.0 + 1.0) * 0.25 + sin(angle2 * 5.0) * 0.1;
+  let wave3 = d3 + sin(d3 * 0.5) * 0.2;
+
+  // Create concentric rings from each center
+  let rings1 = sin(wave1 * 12.0) * 0.5 + 0.5;
+  let rings2 = sin(wave2 * 10.0 + 2.0) * 0.5 + 0.5;
+  let rings3 = sin(wave3 * 8.0 + 1.5) * 0.5 + 0.5;
+
+  // Combine the patterns
+  let combined = (rings1 + rings2 + rings3) / 3.0;
+
+  // Sharpen to create distinct lines
+  return smoothstep(0.4, 0.6, combined);
 }
 
 fn vDiagonalBand(pos: f32) -> f32 {
@@ -488,8 +505,12 @@ fn pokemonVStrips(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> v
   let colorShift = lightAngle + viewMagnitude * 0.3 + direction * 0.15;
   var stripColor = sunpillarColor(colorShift);
 
-  // Boost color vibrancy
-  stripColor = stripColor * 1.4;
+  // Boost color vibrancy and add dazzle
+  stripColor = stripColor * 1.8;
+
+  // Add white highlight for extra shine
+  let highlight = pow(stripMask, 2.0) * 0.3;
+  stripColor = stripColor + vec3f(highlight);
 
   return vec4f(stripColor, stripMask);
 }
@@ -525,6 +546,11 @@ fn pokemonVLayer(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> ve
   // Screen blend for brightness where strips overlap
   var result = blendedColor * blendIntensity + totalColor * 0.3;
 
+  // === Apply single fingerprint mask to all combined strips ===
+  let fpUV = uv * 2.0; // Tile the texture
+  let fingerprint = textureSample(tFingerprint, s, fpUV).r;
+  result = result * fingerprint;
+
   // === Radial Spotlight ===
   let lightCenter = pointerPos;
   let radialDist = length(uv - lightCenter);
@@ -538,10 +564,14 @@ fn pokemonVLayer(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> ve
 
   // Boost saturation for vibrant colors
   let grey = dot(result, vec3f(0.299, 0.587, 0.114));
-  result = mix(vec3f(grey), result, 2.2);
+  result = mix(vec3f(grey), result, 2.8);
 
-  // Slight contrast adjustment
-  result = (result - 0.15) * 1.25 + 0.15;
+  // Contrast and brightness boost for dazzling effect
+  result = (result - 0.1) * 1.5 + 0.1;
+
+  // Add bloom/glow effect
+  let glow = pow(max(result, vec3f(0.0)), vec3f(0.8)) * 0.2;
+  result = result + glow;
 
   return clamp(result, vec3f(0.0), vec3f(1.0));
 }
@@ -692,8 +722,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   // 2d. Pokemon V diagonal foil: two color-dodge shine layers moving in opposite directions.
   if (uniforms.pokemonVIntensity > 0.0) {
     let vShine = pokemonVEffect(uv, pointerPos);
+    // Reduce intensity in artwork area based on artwork alpha
+    let vIntensity = mix(uniforms.pokemonVIntensity, uniforms.pokemonVIntensity * uniforms.pokemonVArtworkAlpha, artworkMask);
     // Apply pure color-dodge for the high-intensity holographic look
-    let dodged = blendColorDodge(color.rgb, vShine * uniforms.pokemonVIntensity);
+    let dodged = blendColorDodge(color.rgb, vShine * vIntensity);
     color = vec4f(dodged, color.a);
   }
 

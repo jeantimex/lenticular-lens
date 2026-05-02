@@ -47,20 +47,23 @@ async function init() {
   };
 
   const base = import.meta.env.BASE_URL;
-  const [t0, t1, t2, bgTexture] = await Promise.all([
+  const [t0, t1, t2, bgTexture, fingerprintTexture] = await Promise.all([
     loadImage(`${base}assets/boa.png`),
     loadImage(`${base}assets/nico.png`),
     loadImage(`${base}assets/nami.png`),
     loadImage(`${base}assets/background.jpg`),
+    loadImage(`${base}assets/illusion-mask.png`),
   ]);
 
   const sampler = device.createSampler({
     magFilter: 'linear',
     minFilter: 'linear',
+    addressModeU: 'repeat',
+    addressModeV: 'repeat',
   });
 
-  // Uniforms are 20 floats. Keep the buffer size 16-byte aligned for WebGPU.
-  const uniformBufferSize = 80;
+  // Uniforms are 22 floats. Keep the buffer size 16-byte aligned for WebGPU.
+  const uniformBufferSize = 88;
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -108,6 +111,7 @@ async function init() {
       { binding: 2, resource: t0.createView() },
       { binding: 3, resource: t1.createView() },
       { binding: 4, resource: t2.createView() },
+      { binding: 5, resource: fingerprintTexture.createView() },
     ],
   });
 
@@ -224,9 +228,10 @@ async function init() {
     pokemonVEnabled: true,
     pokemonVIntensity: 0.7,
     pokemonVBrightness: 0.85,
-    pokemonVScale: 1.9,
+    pokemonVScale: 1.5,
     pokemonVStripWidth: 0.13,
     pokemonVStripSoftness: 0.075,
+    pokemonVArtworkAlpha: 0.2,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -265,6 +270,7 @@ async function init() {
   pokemonVFolder.add(params, 'pokemonVScale', 0.5, 2.0, 0.05).name('Scale');
   pokemonVFolder.add(params, 'pokemonVStripWidth', 0.01, 0.15, 0.005).name('Strip Width');
   pokemonVFolder.add(params, 'pokemonVStripSoftness', 0.005, 0.08, 0.005).name('Strip Softness');
+  pokemonVFolder.add(params, 'pokemonVArtworkAlpha', 0, 1, 0.05).name('Artwork Alpha');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
@@ -311,6 +317,8 @@ async function init() {
       params.pokemonVScale,
       params.pokemonVStripWidth,
       params.pokemonVStripSoftness,
+      params.pokemonVArtworkAlpha,
+      0, // padding
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
   }
