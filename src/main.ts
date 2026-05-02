@@ -342,15 +342,22 @@ async function init() {
     requestAnimationFrame(frame);
   }
 
-  window.addEventListener('mousemove', (e) => {
+  // Pointer events for mouse and touch support
+  window.addEventListener('pointermove', (e) => {
     if (!params.autoRotate) {
-      // Map mouse position to rotation angles
-      const mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-      const mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+      const pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+      const pointerY = (e.clientY / window.innerHeight) * 2 - 1;
 
-      // Rotate card based on mouse position (like hovering over a 3D card)
-      targetRotateY = mouseX * 0.5;  // Horizontal rotation
-      targetRotateX = -mouseY * 0.3; // Vertical rotation (inverted for natural feel)
+      targetRotateY = pointerX * 0.5;
+      targetRotateX = -pointerY * 0.3;
+    }
+  });
+
+  // Touch/click on canvas to disable auto-rotate and enable manual control
+  canvas.addEventListener('pointerdown', () => {
+    if (params.autoRotate) {
+      params.autoRotate = false;
+      gui.controllersRecursive().find(c => c.property === 'autoRotate')?.updateDisplay();
     }
   });
 
