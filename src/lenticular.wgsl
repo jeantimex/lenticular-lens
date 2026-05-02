@@ -9,8 +9,8 @@ struct Uniforms {
   glossiness: f32,
   glitterIntensity: f32,
   holoIntensity: f32,
+  radiantIntensity: f32,
   time: f32,
-  padding1: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -273,6 +273,55 @@ fn holoBeamEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
   return finalHolo * 1.2;
 }
 
+fn radiantFacetBand(pos: f32) -> f32 {
+  let tri = 1.0 - abs(fract(pos) - 0.5) * 2.0;
+  let stepped = floor(tri * 7.0) / 6.0;
+  return pow(stepped, 1.35);
+}
+
+fn spectralPastel(hue: f32) -> vec3f {
+  let h = fract(hue) * 6.2831853;
+  let spectrum = vec3f(
+    0.5 + 0.5 * sin(h),
+    0.5 + 0.5 * sin(h + 2.094),
+    0.5 + 0.5 * sin(h + 4.188)
+  );
+  return mix(vec3f(1.0), spectrum, 0.62);
+}
+
+// Radiant Holo effect based on the CSS reference:
+// larger opposing 45-degree facets, a pastel foil layer, and fine etching.
+fn radiantHoloEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
+  let view = pointerPos - vec2f(0.5);
+  let fastShift = vec2f(view.x * 2.25, view.y * 2.25);
+  let slowShift = vec2f(view.x * -3.6, view.y * -3.6);
+
+  let d45 = (uv.x + uv.y) * 1.6 + fastShift.x + fastShift.y;
+  let dM45 = (uv.x - uv.y) * 1.6 + fastShift.x - fastShift.y;
+  let facet45 = radiantFacetBand(d45);
+  let facetM45 = radiantFacetBand(dM45);
+
+  let facets = pow(facet45 * facetM45, 0.78);
+  let ridges = max(pow(facet45, 5.0), pow(facetM45, 5.0));
+
+  let foilPos = (uv.x + uv.y) * 1.15 + slowShift.x + slowShift.y + time * 0.015;
+  let foil = spectralPastel(foilPos);
+
+  let bloomCenter = pointerPos * 0.5 + vec2f(0.25);
+  let bloomDist = length((uv - bloomCenter) * vec2f(0.82, 1.08));
+  let bloom = 1.0 - smoothstep(0.04, 0.82, bloomDist);
+
+  let etchA = 0.5 + 0.5 * sin((uv.x + uv.y + view.x * 0.2) * 520.0);
+  let etchB = 0.5 + 0.5 * sin((uv.x - uv.y + view.y * 0.2) * 460.0);
+  let etch = mix(0.58, 1.18, max(etchA, etchB));
+
+  let diagonalSheen = smoothstep(0.18, 0.72, fract((uv.x + uv.y) * 1.8 + slowShift.x * 0.35));
+  let facetLight = facets * 0.42 + ridges * 0.32 + bloom * 0.42 + diagonalSheen * 0.12;
+  let radiant = foil * facetLight * etch * 1.18;
+
+  return clamp(radiant, vec3f(0.0), vec3f(0.92));
+}
+
 // Cosmos/Galaxy glitter effect
 fn cosmosEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
   let viewAngle = (pointerPos - 0.5) * 2.0;
@@ -362,28 +411,38 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     color = vec4f(color.rgb * (1.0 - edgeDark * uniforms.glareIntensity), color.a);
   }
 
-  // --- 2. Holographic Effects (artwork area only) ---
+  // --- 2. Holographic Effects ---
   let artworkMask = isInArtworkArea(uv);
-  if (artworkMask > 0.0) {
-    // 2a. Cosmos Glitter
-    if (uniforms.glitterIntensity > 0.0) {
-      let glitterValue = cosmosEffect(uv, pointerPos, uniforms.time);
+  
+  // 2a. Cosmos Glitter (artwork area only)
+  if (artworkMask > 0.0 && uniforms.glitterIntensity > 0.0) {
+    let glitterValue = cosmosEffect(uv, pointerPos, uniforms.time);
 
-      // Apply with color-dodge blend for bright sparkles
-      let glitterBlend = blendColorDodge(color.rgb, glitterValue);
-      color = vec4f(mix(color.rgb, glitterBlend, uniforms.glitterIntensity * artworkMask), color.a);
+    // Apply with color-dodge blend for bright sparkles
+    let glitterBlend = blendColorDodge(color.rgb, glitterValue);
+    color = vec4f(mix(color.rgb, glitterBlend, uniforms.glitterIntensity * artworkMask), color.a);
 
-      // Add soft-light layer for subtler effect
-      let softGlitter = blendSoftLight(color.rgb, glitterValue * 0.5);
-      color = vec4f(mix(color.rgb, softGlitter, uniforms.glitterIntensity * 0.3 * artworkMask), color.a);
-    }
+    // Add soft-light layer for subtler effect
+    let softGlitter = blendSoftLight(color.rgb, glitterValue * 0.5);
+    color = vec4f(mix(color.rgb, softGlitter, uniforms.glitterIntensity * 0.3 * artworkMask), color.a);
+  }
 
-    // 2b. Vertical Holo Beams
-    if (uniforms.holoIntensity > 0.0) {
-      let holoBeamValue = holoBeamEffect(uv, pointerPos, uniforms.time);
-      let holoBeamBlend = blendColorDodge(color.rgb, holoBeamValue);
-      color = vec4f(mix(color.rgb, holoBeamBlend, uniforms.holoIntensity * artworkMask), color.a);
-    }
+  // 2b. Vertical Holo Beams (artwork area only)
+  if (artworkMask > 0.0 && uniforms.holoIntensity > 0.0) {
+    let holoBeamValue = holoBeamEffect(uv, pointerPos, uniforms.time);
+    let holoBeamBlend = blendColorDodge(color.rgb, holoBeamValue);
+    color = vec4f(mix(color.rgb, holoBeamBlend, uniforms.holoIntensity * artworkMask), color.a);
+  }
+
+  // 2c. Radiant Holo (Criss-cross) - applies to the whole card
+  if (uniforms.radiantIntensity > 0.0) {
+    // Card mask to keep it inside the borders (rounded corners feel)
+    let cardMask = smoothstep(0.0, 0.02, uv.x) * (1.0 - smoothstep(0.98, 1.0, uv.x)) *
+                   smoothstep(0.0, 0.02, uv.y) * (1.0 - smoothstep(0.98, 1.0, uv.y));
+                   
+    let radiantValue = radiantHoloEffect(uv, pointerPos, uniforms.time);
+    let radiantBlend = blendColorDodge(color.rgb, radiantValue);
+    color = vec4f(mix(color.rgb, radiantBlend, uniforms.radiantIntensity * cardMask), color.a);
   }
 
   // --- 4. Glossy Reflection / Fresnel Effect ---

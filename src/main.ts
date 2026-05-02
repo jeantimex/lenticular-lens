@@ -61,7 +61,7 @@ async function init() {
 
   // Uniforms: rotateX, rotateY, lensDensity, imageAspectRatio, canvasAspectRatio, cardScale,
   // holoIntensity, glareIntensity, sparkleIntensity, time, padding x2
-  const uniformBufferSize = 48; // 12 floats
+  const uniformBufferSize = 48; // 12 floats (rotateX, rotateY, density, imgAspect, canvasAspect, scale, glare, gloss, glitter, holo, radiant, time)
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -214,6 +214,7 @@ async function init() {
     glossiness: 0.7,
     glitterIntensity: 0.6,
     holoIntensity: 0.5,
+    radiantIntensity: 0.2,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -230,6 +231,7 @@ async function init() {
   holoFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
   holoFolder.add(params, 'glitterIntensity', 0, 1, 0.05).name('Glitter');
   holoFolder.add(params, 'holoIntensity', 0, 1, 0.05).name('Holo Beams');
+  holoFolder.add(params, 'radiantIntensity', 0, 1, 0.05).name('Radiant');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'cardScale', 0.3, 1.5, 0.05).name('Scale');
@@ -265,8 +267,8 @@ async function init() {
       params.glossiness,
       params.glitterIntensity,
       params.holoIntensity,
+      params.radiantIntensity,
       time * 0.001, // time in seconds
-      0, // padding
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
   }
