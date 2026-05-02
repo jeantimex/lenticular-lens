@@ -59,10 +59,8 @@ async function init() {
     minFilter: 'linear',
   });
 
-  // Uniforms: rotateX, rotateY, lensDensity, imageAspectRatio, canvasAspectRatio, cardScale,
-  // glareIntensity, glossiness, glitterIntensity, holoIntensity, radiantIntensity,
-  // radiantStripWidth, radiantBrightness, time, padding x2
-  const uniformBufferSize = 64; // 16 floats
+  // Uniforms are 20 floats. Keep the buffer size 16-byte aligned for WebGPU.
+  const uniformBufferSize = 80;
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -223,6 +221,12 @@ async function init() {
     radiantScale: 2.5,
     radiantBrightness: 0.8,
     radiantArtworkIntensity: 0.2,
+    pokemonVEnabled: true,
+    pokemonVIntensity: 0.7,
+    pokemonVBrightness: 0.85,
+    pokemonVScale: 1.9,
+    pokemonVStripWidth: 0.13,
+    pokemonVStripSoftness: 0.075,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -253,6 +257,14 @@ async function init() {
   radiantFolder.add(params, 'radiantScale', 0.35, 2.5, 0.05).name('Scale');
   radiantFolder.add(params, 'radiantBrightness', 0.4, 2.0, 0.05).name('Brightness');
   radiantFolder.add(params, 'radiantArtworkIntensity', 0, 1, 0.05).name('Artwork Alpha');
+
+  const pokemonVFolder = holoFolder.addFolder('Pokemon V');
+  pokemonVFolder.add(params, 'pokemonVEnabled').name('Enabled');
+  pokemonVFolder.add(params, 'pokemonVIntensity', 0, 1, 0.05).name('Intensity');
+  pokemonVFolder.add(params, 'pokemonVBrightness', 0.2, 1.5, 0.05).name('Brightness');
+  pokemonVFolder.add(params, 'pokemonVScale', 0.5, 2.0, 0.05).name('Scale');
+  pokemonVFolder.add(params, 'pokemonVStripWidth', 0.01, 0.15, 0.005).name('Strip Width');
+  pokemonVFolder.add(params, 'pokemonVStripSoftness', 0.005, 0.08, 0.005).name('Strip Softness');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
@@ -294,7 +306,11 @@ async function init() {
       params.radiantBrightness,
       params.radiantArtworkIntensity,
       time * 0.001, // time in seconds
-      0,
+      params.pokemonVEnabled ? params.pokemonVIntensity : 0,
+      params.pokemonVBrightness,
+      params.pokemonVScale,
+      params.pokemonVStripWidth,
+      params.pokemonVStripSoftness,
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
   }

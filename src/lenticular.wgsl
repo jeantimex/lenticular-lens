@@ -14,6 +14,11 @@ struct Uniforms {
   radiantBrightness: f32,
   radiantArtworkIntensity: f32,
   time: f32,
+  pokemonVIntensity: f32,
+  pokemonVBrightness: f32,
+  pokemonVScale: f32,
+  pokemonVStripWidth: f32,
+  pokemonVStripSoftness: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -149,6 +154,10 @@ fn blendHardLight(base: vec3f, blend: vec3f) -> vec3f {
     1.0 - 2.0 * (1.0 - base) * (1.0 - blend),
     step(vec3f(0.5), blend)
   );
+}
+
+fn blendScreen(base: vec3f, blend: vec3f) -> vec3f {
+  return 1.0 - (1.0 - base) * (1.0 - blend);
 }
 
 // Hash functions for noise
@@ -350,6 +359,202 @@ fn radiantHoloEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
   return clamp(filteredShine, vec3f(0.0), vec3f(1.0)) * uniforms.radiantBrightness;
 }
 
+fn rainbowColor(t: f32) -> vec3f {
+  let p = fract(t);
+  let c1 = vec3f(1.0, 0.2, 0.6); // Pink
+  let c2 = vec3f(0.6, 0.2, 0.9); // Purple
+  let c3 = vec3f(0.1, 0.4, 1.0); // Blue
+  let c4 = vec3f(0.1, 1.0, 0.4); // Green
+  let c5 = vec3f(1.0, 0.9, 0.2); // Yellow
+  let c6 = vec3f(1.0, 0.4, 0.1); // Orange
+
+  if (p < 1.0 / 6.0) {
+    return mix(c1, c2, p * 6.0);
+  } else if (p < 2.0 / 6.0) {
+    return mix(c2, c3, (p - 1.0 / 6.0) * 6.0);
+  } else if (p < 3.0 / 6.0) {
+    return mix(c3, c4, (p - 2.0 / 6.0) * 6.0);
+  } else if (p < 4.0 / 6.0) {
+    return mix(c4, c5, (p - 3.0 / 6.0) * 6.0);
+  } else if (p < 5.0 / 6.0) {
+    return mix(c5, c6, (p - 4.0 / 6.0) * 6.0);
+  }
+  return mix(c6, c1, (p - 5.0 / 6.0) * 6.0);
+}
+
+// HSL to RGB conversion
+fn hsl2rgb(h: f32, s: f32, l: f32) -> vec3f {
+  let c = (1.0 - abs(2.0 * l - 1.0)) * s;
+  let x = c * (1.0 - abs(fract(h / 60.0) * 2.0 - 1.0));
+  let m = l - c / 2.0;
+  var rgb: vec3f;
+  let hue = fract(h / 360.0) * 360.0;
+  if (hue < 60.0) {
+    rgb = vec3f(c, x, 0.0);
+  } else if (hue < 120.0) {
+    rgb = vec3f(x, c, 0.0);
+  } else if (hue < 180.0) {
+    rgb = vec3f(0.0, c, x);
+  } else if (hue < 240.0) {
+    rgb = vec3f(0.0, x, c);
+  } else if (hue < 300.0) {
+    rgb = vec3f(x, 0.0, c);
+  } else {
+    rgb = vec3f(c, 0.0, x);
+  }
+  return rgb + vec3f(m);
+}
+
+// Scattered color set: purple, green, yellow
+fn sunpillarColor(t: f32) -> vec3f {
+  let p = fract(t);
+  // 3 main colors that cycle with high contrast
+  let purple = hsl2rgb(280.0, 1.0, 0.50);  // Vibrant purple
+  let green = hsl2rgb(120.0, 1.0, 0.45);   // Bright green
+  let yellow = hsl2rgb(55.0, 1.0, 0.50);   // Golden yellow
+
+  if (p < 1.0 / 3.0) {
+    return mix(purple, green, p * 3.0);
+  } else if (p < 2.0 / 3.0) {
+    return mix(green, yellow, (p - 1.0 / 3.0) * 3.0);
+  }
+  return mix(yellow, purple, (p - 2.0 / 3.0) * 3.0);
+}
+
+// Fingerprint diagonal band pattern from CSS:
+// repeating-linear-gradient(133deg, #0e152e 0%, hsl(180,10%,60%) 3.8%, hsl(180,29%,66%) 4.5%, hsl(180,10%,60%) 5.2%, #0e152e 10%, #0e152e 12%)
+fn fingerprintBand(pos: f32) -> f32 {
+  let p = fract(pos);
+  // Dark background with thin bright band
+  let darkBg = vec3f(0.055, 0.082, 0.18); // #0e152e
+
+  // Sharp thin band between 3.8% and 5.2% of the 12% cycle
+  // Normalize to 0-1 range where the pattern repeats every 12%
+  let cyclePos = fract(pos * (1.0 / 0.12));
+
+  // Band peaks at 4.5%/12% = 0.375
+  let bandCenter = 0.375;
+  let bandWidth = 0.12; // width of bright band
+  let dist = abs(cyclePos - bandCenter);
+  let band = smoothstep(bandWidth, 0.0, dist);
+
+  return band;
+}
+
+fn vDiagonalBand(pos: f32) -> f32 {
+  let p = fract(pos);
+  let leadingEdge = smoothstep(0.315, 0.37, p);
+  let trailingEdge = 1.0 - smoothstep(0.43, 0.49, p);
+  let core = exp(-pow((p - 0.405) * 26.0, 2.0));
+  let shoulder = smoothstep(0.08, 0.0, abs(p - 0.405)) * 0.55;
+  return clamp(leadingEdge * trailingEdge + core * 1.25 + shoulder, 0.0, 1.0);
+}
+
+// Hue blend mode - shifts the hue of base to match blend
+fn blendHue(base: vec3f, blend: vec3f) -> vec3f {
+  // Simplified hue blending: multiply base luminance by blend color normalized
+  let baseLum = dot(base, vec3f(0.299, 0.587, 0.114));
+  let blendLum = dot(blend, vec3f(0.299, 0.587, 0.114));
+  if (blendLum < 0.01) { return base; }
+  return blend * (baseLum / blendLum);
+}
+
+// Single strip layer - color based on light angle for holographic effect
+fn pokemonVStrips(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> vec4f {
+  let view = (pointerPos - 0.5) * 2.0;
+
+  // Background position shift - strips move based on pointer
+  let bgShift = view * direction * 0.6;
+
+  // Diagonal strips at 133 degrees
+  let angle133 = radians(133.0);
+  let diagDir = vec2f(cos(angle133), sin(angle133));
+  let diagPos = dot(uv + bgShift * 0.5, diagDir) * 3.0 / scale;
+
+  // Strip pattern with adjustable width and softness
+  let fp = fract(diagPos);
+  let stripW = uniforms.pokemonVStripWidth;
+  let softness = uniforms.pokemonVStripSoftness;
+  let bandStart = 0.04;
+  let bandEnd = bandStart + stripW;
+  let stripMask = smoothstep(bandStart - softness, bandStart + softness, fp) *
+                  (1.0 - smoothstep(bandEnd - softness, bandEnd + softness, fp));
+
+  // Color based on light angle - shifts as you tilt the card
+  let lightAngle = atan2(view.y, view.x) / 6.28 + 0.5; // Normalize to 0-1
+  let viewMagnitude = length(view);
+
+  // Combine light angle with position for rainbow shift effect
+  let colorShift = lightAngle + viewMagnitude * 0.3 + direction * 0.15;
+  var stripColor = sunpillarColor(colorShift);
+
+  // Boost color vibrancy
+  stripColor = stripColor * 1.4;
+
+  return vec4f(stripColor, stripMask);
+}
+
+fn pokemonVLayer(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> vec3f {
+  let view = (pointerPos - 0.5) * 2.0;
+
+  // === TWO SETS OF STRIPS moving in opposite directions ===
+  let strips1 = pokemonVStrips(uv, pointerPos, direction, scale);
+  let strips2 = pokemonVStrips(uv, pointerPos, -direction, scale * 0.85);
+
+  // Offset the second set slightly for visual variety
+  let strips2Offset = pokemonVStrips(uv + vec2f(0.05, -0.03), pointerPos, -direction * 0.7, scale * 1.1);
+
+  // Additive color blending - colors mix where strips overlap
+  var totalColor = vec3f(0.0);
+  var totalAlpha = 0.0;
+
+  // Accumulate colors with their alpha weights
+  totalColor += strips1.rgb * strips1.a;
+  totalAlpha += strips1.a;
+
+  totalColor += strips2.rgb * strips2.a;
+  totalAlpha += strips2.a;
+
+  totalColor += strips2Offset.rgb * strips2Offset.a * 0.6;
+  totalAlpha += strips2Offset.a * 0.6;
+
+  // Blend the accumulated colors (additive blend creates color mixing)
+  let blendedColor = totalColor / max(totalAlpha, 0.01);
+  let blendIntensity = min(totalAlpha, 1.0);
+
+  // Screen blend for brightness where strips overlap
+  var result = blendedColor * blendIntensity + totalColor * 0.3;
+
+  // === Radial Spotlight ===
+  let lightCenter = pointerPos;
+  let radialDist = length(uv - lightCenter);
+  let spotlightMask = 1.0 - smoothstep(0.0, 0.9, radialDist) * 0.25;
+
+  result = result * spotlightMask;
+
+  // === Grain texture ===
+  let grain = hash(uv * 500.0 + direction * 17.3) * 0.08;
+  result += vec3f(grain * blendIntensity);
+
+  // Boost saturation for vibrant colors
+  let grey = dot(result, vec3f(0.299, 0.587, 0.114));
+  result = mix(vec3f(grey), result, 2.2);
+
+  // Slight contrast adjustment
+  result = (result - 0.15) * 1.25 + 0.15;
+
+  return clamp(result, vec3f(0.0), vec3f(1.0));
+}
+
+fn pokemonVEffect(uv: vec2f, pointerPos: vec2f) -> vec3f {
+  // Main layer with two crossing strip sets built-in
+  let mainLayer = pokemonVLayer(uv, pointerPos, 1.0, uniforms.pokemonVScale);
+
+  let edgeMask = smoothstep(0.0, 0.018, uv.x) * (1.0 - smoothstep(0.982, 1.0, uv.x)) *
+                 smoothstep(0.0, 0.018, uv.y) * (1.0 - smoothstep(0.982, 1.0, uv.y));
+  return clamp(mainLayer * uniforms.pokemonVBrightness * edgeMask, vec3f(0.0), vec3f(1.0));
+}
+
 // Cosmos/Galaxy glitter effect
 fn cosmosEffect(uv: vec2f, pointerPos: vec2f, time: f32) -> vec3f {
   let viewAngle = (pointerPos - 0.5) * 2.0;
@@ -482,6 +687,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let localIntensity = mix(intensity, intensity * uniforms.radiantArtworkIntensity, artworkMask);
     
     color = vec4f(blendColorDodge(color.rgb, radiantShine * localIntensity), color.a);
+  }
+
+  // 2d. Pokemon V diagonal foil: two color-dodge shine layers moving in opposite directions.
+  if (uniforms.pokemonVIntensity > 0.0) {
+    let vShine = pokemonVEffect(uv, pointerPos);
+    // Apply pure color-dodge for the high-intensity holographic look
+    let dodged = blendColorDodge(color.rgb, vShine * uniforms.pokemonVIntensity);
+    color = vec4f(dodged, color.a);
   }
 
   // --- 4. Glossy Reflection / Fresnel Effect ---
