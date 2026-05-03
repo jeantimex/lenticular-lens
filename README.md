@@ -74,5 +74,8 @@ The project uses several textures for the effects:
 *   `background.jpg`: An environment map for the scene.
 *   `illusion-mask.png`: The "fingerprint" etched texture used for the Pokemon V foil.
 
+## Credits
+Some of the visual effects in this project were inspired by or ported from the excellent work in [pokemon-cards-css](https://github.com/simeydotme/pokemon-cards-css) by simeydotme.
+
 ---
 Created by [jeantimex](https://github.com/jeantimex)
