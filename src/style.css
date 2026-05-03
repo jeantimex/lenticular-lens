@@ -31,28 +31,33 @@ body {
   touch-action: none; /* Prevent default touch behaviors */
 }
 
-#ui {
+.github-link {
   position: absolute;
-  top: 20px;
+  bottom: 20px;
   left: 20px;
   z-index: 10;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: none;
-}
-
-#ui * {
-  pointer-events: auto;
-}
-
-.hint {
-  background: rgba(0, 0, 0, 0.6);
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 14px;
+  align-items: center;
+  gap: 8px;
   color: white;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 12px;
+  border-radius: 20px;
   backdrop-filter: blur(4px);
+  transition: background 0.2s, transform 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.github-link:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px);
+}
+
+.github-link svg {
+  fill: white;
 }
 
 button {
