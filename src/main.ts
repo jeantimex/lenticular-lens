@@ -62,8 +62,8 @@ async function init() {
     addressModeV: 'repeat',
   });
 
-  // Uniforms are 22 floats. Keep the buffer size 16-byte aligned for WebGPU.
-  const uniformBufferSize = 88;
+  // Uniforms are 25 floats. Aligned to 16 bytes (4 floats) -> 28 floats = 112 bytes.
+  const uniformBufferSize = 112;
   const uniformBuffer = device.createBuffer({
     size: uniformBufferSize,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -210,6 +210,9 @@ async function init() {
   // Parameters controllable via GUI
   const params = {
     lensDensity: 70,
+    lensTransition: 0.12,
+    lensRidgeIntensity: 1.0,
+    lensSwing: 0.3,
     cardScale: 0.8,
     autoRotate: true,
     rotateSpeed: 1.0,
@@ -225,13 +228,14 @@ async function init() {
     radiantScale: 2.5,
     radiantBrightness: 0.8,
     radiantArtworkIntensity: 0.2,
-    pokemonVEnabled: true,
+    pokemonVEnabled: false,
     pokemonVIntensity: 0.7,
     pokemonVBrightness: 0.85,
     pokemonVScale: 1.5,
     pokemonVStripWidth: 0.13,
     pokemonVStripSoftness: 0.075,
     pokemonVArtworkAlpha: 0.2,
+    pokemonVFingerprintScale: 5.0,
     shadowOpacity: 0.5,
     shadowSoftness: 0.15,
   };
@@ -242,6 +246,9 @@ async function init() {
 
   const lenticularFolder = gui.addFolder('Lenticular');
   lenticularFolder.add(params, 'lensDensity', 5, 100, 1).name('Strip Density');
+  lenticularFolder.add(params, 'lensTransition', 0.01, 0.3, 0.01).name('Transition');
+  lenticularFolder.add(params, 'lensRidgeIntensity', 0, 2, 0.05).name('Ridge Strength');
+  lenticularFolder.add(params, 'lensSwing', 0, 1, 0.05).name('Lens Swing');
 
   const holoFolder = gui.addFolder('Holographic');
   const glareFolder = holoFolder.addFolder('Glare');
@@ -271,6 +278,7 @@ async function init() {
   pokemonVFolder.add(params, 'pokemonVStripWidth', 0.01, 0.15, 0.005).name('Strip Width');
   pokemonVFolder.add(params, 'pokemonVStripSoftness', 0.005, 0.08, 0.005).name('Strip Softness');
   pokemonVFolder.add(params, 'pokemonVArtworkAlpha', 0, 1, 0.05).name('Artwork Alpha');
+  pokemonVFolder.add(params, 'pokemonVFingerprintScale', 1, 10, 0.1).name('Fingerprint Scale');
 
   const cardFolder = gui.addFolder('Card');
   cardFolder.add(params, 'glossiness', 0, 1, 0.05).name('Glossiness');
@@ -318,7 +326,11 @@ async function init() {
       params.pokemonVStripWidth,
       params.pokemonVStripSoftness,
       params.pokemonVArtworkAlpha,
-      0, // padding
+      params.lensTransition,
+      params.lensRidgeIntensity,
+      params.lensSwing,
+      params.pokemonVFingerprintScale,
+      0, 0, 0 // padding to 28 floats (112 bytes)
     ]);
     device.queue.writeBuffer(uniformBuffer, 0, arrayBuffer);
   }

@@ -20,7 +20,10 @@ struct Uniforms {
   pokemonVStripWidth: f32,
   pokemonVStripSoftness: f32,
   pokemonVArtworkAlpha: f32,
-  padding0: f32,
+  lensTransition: f32,
+  lensRidgeIntensity: f32,
+  lensSwing: f32,
+  pokemonVFingerprintScale: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -547,7 +550,7 @@ fn pokemonVLayer(uv: vec2f, pointerPos: vec2f, direction: f32, scale: f32) -> ve
   var result = blendedColor * blendIntensity + totalColor * 0.3;
 
   // === Apply single fingerprint mask to all combined strips ===
-  let fpUV = uv * 2.0; // Tile the texture
+  let fpUV = uv * uniforms.pokemonVFingerprintScale; // Tile the texture
   let fingerprint = textureSample(tFingerprint, s, fpUV).r;
   result = result * fingerprint;
 
@@ -627,11 +630,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   let stripPhase = fract(uv.x * uniforms.lensDensity + angle * uniforms.lensDensity * 0.5);
 
   // Combine global angle with local strip position
-  let lensAngle = t + (stripPhase - 0.5) * 0.3;
+  let lensAngle = t + (stripPhase - 0.5) * uniforms.lensSwing;
   let normalizedAngle = clamp(lensAngle, 0.0, 1.0);
 
   // Smooth transitions between 3 images
-  let transitionWidth = 0.12;
+  let transitionWidth = uniforms.lensTransition;
   let mask0 = 1.0 - smoothstep(0.33 - transitionWidth, 0.33 + transitionWidth, normalizedAngle);
   let mask1 = smoothstep(0.33 - transitionWidth, 0.33 + transitionWidth, normalizedAngle) *
               (1.0 - smoothstep(0.66 - transitionWidth, 0.66 + transitionWidth, normalizedAngle));
@@ -640,8 +643,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   var color = c0 * mask0 + c1 * mask1 + c2 * mask2;
 
   // Lens ridge effect
-  let ridgeHighlight = exp(-pow(stripPhase - 0.5, 2.0) * 30.0) * 0.08;
-  let ridgeShadow = 1.0 - pow(abs(stripPhase - 0.5) * 2.0, 0.7) * 0.06;
+  let ridgeHighlight = exp(-pow(stripPhase - 0.5, 2.0) * 30.0) * 0.08 * uniforms.lensRidgeIntensity;
+  let ridgeShadow = 1.0 - pow(abs(stripPhase - 0.5) * 2.0, 0.7) * 0.06 * uniforms.lensRidgeIntensity;
   color = color * ridgeShadow;
   color += vec4f(ridgeHighlight, ridgeHighlight, ridgeHighlight, 0.0);
 
